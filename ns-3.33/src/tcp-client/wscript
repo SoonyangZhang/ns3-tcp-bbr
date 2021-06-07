@@ -1,0 +1,19 @@
+## -*- Mode: python; py-indent-offset: 4; indent-tabs-mode: nil; coding: utf-8; -*-
+
+def build(bld):
+    tcpclient = bld.create_ns3_module('tcp-client', ['core','network','internet'])
+    tcpclient.source = [
+        'model/tcp-client.cc',
+        'model/tcp-server.cc',
+        'model/tcp-sink.cc',
+        'model/tcp-tracer.cc',
+        ]
+    headers = bld(features='ns3header')
+    headers.module = 'tcp-client'
+    headers.source = [
+        'model/tcp-client.h',
+        'model/tcp-server.h',
+        'model/tcp-sink.h',
+        'model/tcp-tracer.h',
+        'model/tcp-utils.h',
+        ]

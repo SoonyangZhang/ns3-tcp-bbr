@@ -133,7 +133,9 @@ TcpRateLinux::GenerateSample (uint32_t delivered, uint32_t lost, bool is_sack_re
   m_rateSampleTrace (m_rateSample);
   return m_rateSample;
 }
-
+void TcpRateLinux::UpdateRtt(Time rtt){
+    m_rateSample.m_rtt=rtt;
+}
 void
 TcpRateLinux::CalculateAppLimited (uint32_t cWnd, uint32_t in_flight,
                                    uint32_t segmentSize, const SequenceNumber32 &tailSeq,
@@ -178,17 +180,14 @@ TcpRateLinux::SkbDelivered (TcpTxItem * skb)
   if (m_rateSample.m_priorDelivered == 0
       || skbInfo.m_delivered > m_rateSample.m_priorDelivered)
     {
-      m_rateSample.m_ackElapsed       = Simulator::Now () - m_rateSample.m_priorTime;
       m_rateSample.m_priorDelivered   = skbInfo.m_delivered;
       m_rateSample.m_priorTime        = skbInfo.m_deliveredTime;
       m_rateSample.m_isAppLimited     = skbInfo.m_isAppLimited;
       m_rateSample.m_sendElapsed      = skb->GetLastSent () - skbInfo.m_firstSent;
-
-      m_rateSampleTrace (m_rateSample);
-
       m_rate.m_firstSentTime          = skb->GetLastSent ();
     }
-
+    m_rateSample.m_ackElapsed       = Simulator::Now () - m_rateSample.m_priorTime;
+    m_rateSampleTrace (m_rateSample);
   /* Mark off the skb delivered once it's taken into account to avoid being
    * used again when it's cumulatively acked, in case it was SACKed.
    */

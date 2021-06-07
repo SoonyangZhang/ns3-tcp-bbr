@@ -117,7 +117,10 @@ public:
    *
    */
   virtual const TcpRateConnection & GetConnectionRate () = 0;
-
+  /*
+  * \param rtt Instant RTT
+  */
+  virtual void UpdateRtt(Time rtt)=0;
   /**
    * \brief Rate Sample structure
    *
@@ -139,6 +142,7 @@ public:
     Time          m_priorTime      {Seconds (0.0)};    //!< The delivered time of the most recent packet delivered
     Time          m_sendElapsed    {Seconds (0.0)};    //!< Send time interval calculated from the most recent packet delivered
     Time          m_ackElapsed     {Seconds (0.0)};    //!< ACK time interval calculated from the most recent packet delivered
+    Time          m_rtt            {Time::Max()};      //!< Instant rtt value
     uint32_t      m_bytesLoss      {0};                //!< The amount of data marked as lost from the most recent ack received
     uint32_t      m_priorInFlight  {0};                //!< The value if bytes in flight prior to last received ack
     uint32_t      m_ackedSacked    {0};                //!< The amount of data acked and sacked in the last received ack
@@ -202,7 +206,7 @@ public:
   {
     return m_rate;
   }
-
+  virtual void UpdateRtt(Time rtt) override;
   /**
    * TracedCallback signature for tcp rate update events.
    *

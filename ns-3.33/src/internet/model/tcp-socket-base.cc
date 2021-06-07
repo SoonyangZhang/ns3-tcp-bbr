@@ -3041,7 +3041,7 @@ TcpSocketBase::SendDataPacket (SequenceNumber32 seq, uint32_t maxSize, bool with
   bool isStartOfTransmission = BytesInFlight () == 0U;
   TcpTxItem *outItem = m_txBuffer->CopyFromSequence (maxSize, seq);
 
-  m_rateOps->SkbSent(outItem, isStartOfTransmission);
+  m_rateOps->SkbSent(outItem, isStartOfTransmission&&(m_tcb->m_highTxMark==m_tcb->m_nextTxSequence));
 
   bool isRetransmission = outItem->IsRetrans ();
   Ptr<Packet> p = outItem->GetPacketCopy ();
@@ -3567,6 +3567,7 @@ TcpSocketBase::EstimateRtt (const TcpHeader& tcpHeader)
 
   if (!m.IsZero ())
     {
+      m_rateOps->UpdateRtt(m);
       m_rtt->Measurement (m);                // Log the measurement
       // RFC 6298, clause 2.4
       m_rto = Max (m_rtt->GetEstimate () + Max (m_clockGranularity, m_rtt->GetVariation () * 4), m_minRto);

@@ -54,25 +54,33 @@ static NodeContainer BuildExampleTopo (uint32_t bps,
     }
     return nodes;
 }
+// ./waf --run "scratch/tcp-test --cc=bbr2 --folder=bbr2"
 int main(int argc, char *argv[])
 {
     LogComponentEnable("TcpTest", LOG_LEVEL_ALL);
     LogComponentEnable("TcpClient", LOG_LEVEL_ALL);
     LogComponentEnable("TcpBbr", LOG_LEVEL_ALL);
+    std::string cc("bbr2");
+    std::string folder_name("default");
     CommandLine cmd;
+    cmd.AddValue ("cc", "congestion algorithm1",cc);
+    cmd.AddValue ("folder", "folder name to collect data", folder_name);
     cmd.Parse (argc, argv);
     uint32_t kMaxmiumSegmentSize=1400;
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(200*kMaxmiumSegmentSize));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(200*kMaxmiumSegmentSize));
     Config::SetDefault("ns3::TcpSocket::SegmentSize",UintegerValue(kMaxmiumSegmentSize));
-    
-    std::string algo("bbr");
+    if(0==cc.compare("reno")||0==cc.compare("bic")||0==cc.compare("cubic")||
+      0==cc.compare("bbr")||0==cc.compare("bbr2")){}
+    else{
+        NS_ASSERT_MSG(0,"please input correct cc");
+    }
     std::string trace_folder;
     
     {
         char buf[FILENAME_MAX];
         std::string trace_path=std::string (getcwd(buf, FILENAME_MAX))+"/traces/";
-        trace_folder=trace_path+algo+"/";
+        trace_folder=trace_path+folder_name+"/";
         MakePath(trace_folder);
         TcpBbrDebug::SetTraceFolder(trace_folder.c_str());
         TcpTracer::SetTraceFolder(trace_folder.c_str());
@@ -104,12 +112,12 @@ int main(int argc, char *argv[])
     InetSocketAddress socket_addr=InetSocketAddress{serv_ip,serv_port};
     Address serv_addr=socket_addr;
 
-    uint64_t totalTxBytes = 30000*1500;
+    uint64_t totalTxBytes = 40000*1500;
     {
         Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT|TcpClient::E_TRACE_RATE);
         h1->AddApplication(client);
         client->ConfigurePeer(serv_addr);
-        client->SetCongestionAlgo(algo);
+        client->SetCongestionAlgo(cc);
         client->SetStartTime (Seconds (startTime));
         client->SetStopTime (Seconds (simDuration));
     }
@@ -117,16 +125,16 @@ int main(int argc, char *argv[])
         Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT|TcpClient::E_TRACE_RATE);
         h1->AddApplication(client);
         client->ConfigurePeer(serv_addr);
-        client->SetCongestionAlgo(algo);
-        client->SetStartTime (Seconds (startTime+15));
+        client->SetCongestionAlgo(cc);
+        client->SetStartTime (Seconds (startTime+20));
         client->SetStopTime (Seconds (simDuration));
     }
     {
         Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT|TcpClient::E_TRACE_RATE);
         h1->AddApplication(client);
         client->ConfigurePeer(serv_addr);
-        client->SetCongestionAlgo(algo);
-        client->SetStartTime (Seconds (startTime+40));
+        client->SetCongestionAlgo(cc);
+        client->SetStartTime (Seconds (startTime+50));
         client->SetStopTime (Seconds (simDuration));
     }
     

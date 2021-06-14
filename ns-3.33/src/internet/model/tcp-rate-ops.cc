@@ -73,6 +73,8 @@ TcpRateLinux::GenerateSample (uint32_t delivered, uint32_t lost, bool is_sack_re
   m_rateSample.m_ackedSacked = delivered;   /* freshly ACKed or SACKed */
   m_rateSample.m_bytesLoss   = lost;        /* freshly marked lost */
   m_rateSample.m_priorInFlight = priorInFlight;
+   m_rateSample.m_bytesLostRound=m_rate.m_bytesLostCount-m_rateSample.m_priorbytesLostCount;
+  m_rateSample.m_ecnBytesRound=m_rate.m_deliveredEcnBytes-m_rateSample.m_priorEcnBytes;
 
   /* Return an invalid sample if no timing information is available or
    * in recovery from loss with SACK reneging. Rate samples taken during
@@ -136,6 +138,12 @@ TcpRateLinux::GenerateSample (uint32_t delivered, uint32_t lost, bool is_sack_re
 void TcpRateLinux::UpdateRtt(Time rtt){
     m_rateSample.m_rtt=rtt;
 }
+void TcpRateLinux::NotifySkbLossEvent(TcpTxItem *skb){
+    m_rate.m_bytesLostCount+=skb->GetSeqSize();
+}
+void TcpRateLinux::AddEcnBytes(uint32_t ecnBytes){
+    m_rate.m_deliveredEcnBytes+=ecnBytes;
+}
 void
 TcpRateLinux::CalculateAppLimited (uint32_t cWnd, uint32_t in_flight,
                                    uint32_t segmentSize, const SequenceNumber32 &tailSeq,
@@ -181,8 +189,11 @@ TcpRateLinux::SkbDelivered (TcpTxItem * skb)
       || skbInfo.m_delivered > m_rateSample.m_priorDelivered)
     {
       m_rateSample.m_priorDelivered   = skbInfo.m_delivered;
+      m_rateSample.m_priorEcnBytes    =skbInfo.m_deliveredEcnBytes;
+      m_rateSample.m_priorbytesLostCount=skbInfo.m_bytesLostCount;
       m_rateSample.m_priorTime        = skbInfo.m_deliveredTime;
       m_rateSample.m_isAppLimited     = skbInfo.m_isAppLimited;
+      m_rateSample.m_txInFlight       = skbInfo.m_bytesInFlight;
       m_rateSample.m_sendElapsed      = skb->GetLastSent () - skbInfo.m_firstSent;
       m_rate.m_firstSentTime          = skb->GetLastSent ();
     }
@@ -197,7 +208,7 @@ TcpRateLinux::SkbDelivered (TcpTxItem * skb)
 }
 
 void
-TcpRateLinux::SkbSent (TcpTxItem *skb, bool isStartOfTransmission)
+TcpRateLinux::SkbSent (TcpTxItem *skb, uint32_t bytesInFlight,bool isStartOfTransmission)
 {
   NS_LOG_FUNCTION (this << skb << isStartOfTransmission);
 
@@ -229,6 +240,9 @@ TcpRateLinux::SkbSent (TcpTxItem *skb, bool isStartOfTransmission)
   skbInfo.m_deliveredTime = m_rate.m_deliveredTime;
   skbInfo.m_isAppLimited  = (m_rate.m_appLimited != 0);
   skbInfo.m_delivered     = m_rate.m_delivered;
+  skbInfo.m_bytesLostCount     =m_rate.m_bytesLostCount;
+  skbInfo.m_deliveredEcnBytes=m_rate.m_deliveredEcnBytes;
+  skbInfo.m_bytesInFlight =bytesInFlight+skb->GetSeqSize();
 }
 
 std::ostream &

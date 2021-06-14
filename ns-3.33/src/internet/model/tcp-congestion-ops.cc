@@ -89,7 +89,15 @@ TcpCongestionOps::CongControl (Ptr<TcpSocketState> tcb,
   NS_UNUSED (rc);
   NS_UNUSED (rs);
 }
-
+void
+TcpCongestionOps::MarkSkbLost(Ptr<TcpSocketState> tcb,
+                           const TcpRateOps::TcpRateConnection &rc,
+                           const TcpTxItem *skb)
+{
+    NS_LOG_FUNCTION (this << tcb);
+    NS_UNUSED (rc);
+    NS_UNUSED (skb);
+}
 // RENO
 
 NS_OBJECT_ENSURE_REGISTERED (TcpNewReno);

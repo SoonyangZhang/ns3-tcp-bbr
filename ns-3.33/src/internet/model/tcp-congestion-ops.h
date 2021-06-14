@@ -23,7 +23,7 @@
 #include "tcp-socket-state.h"
 
 namespace ns3 {
-
+class TcpTxItem;
 /**
  * \ingroup tcp
  * \defgroup congestionOps Congestion Control Algorithms.
@@ -187,7 +187,18 @@ public:
   virtual void CongControl (Ptr<TcpSocketState> tcb,
                             const TcpRateOps::TcpRateConnection &rc,
                             const TcpRateOps::TcpRateSample &rs);
-
+  /**
+   * \brief Called when skb is marked as lost
+   *
+   * This function mimics the function bbr2_skb_marked_lost in Linux. 
+   *
+   * \param tcb internal congestion state
+   * \param rc Rate information for the connection
+   * \param rs Rate sample (over a period of time) information
+   */
+  virtual void MarkSkbLost(Ptr<TcpSocketState> tcb,
+                           const TcpRateOps::TcpRateConnection &rc,
+                           const TcpTxItem *skb);
   // Present in Linux but not in ns-3 yet:
   /* call when ack arrives (optional) */
   //     void (*in_ack_event)(struct sock *sk, u32 flags);

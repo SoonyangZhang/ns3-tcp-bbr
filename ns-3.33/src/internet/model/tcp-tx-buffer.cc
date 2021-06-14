@@ -787,7 +787,8 @@ TcpTxBuffer::DiscardUpTo (const SequenceNumber32& seq,
 
 uint32_t
 TcpTxBuffer::Update (const TcpOptionSack::SackList &list,
-                     const Callback<void, TcpTxItem *> &sackedCb)
+                     const Callback<void, TcpTxItem *> &sackedCb,
+                     const Callback<void, TcpTxItem *> &notifyLossCb)
 {
   NS_LOG_FUNCTION (this);
   NS_LOG_INFO ("Updating scoreboard, got " << list.size () << " blocks to analyze");
@@ -870,7 +871,7 @@ TcpTxBuffer::Update (const TcpOptionSack::SackList &list,
   if (bytesSacked > 0)
     {
       NS_ASSERT_MSG (m_highestSack.first != m_sentList.end(), "Buffer status: " << *this);
-      UpdateLostCount ();
+      UpdateLostCount (notifyLossCb);
     }
 
   NS_ASSERT ((*(m_sentList.begin ()))->m_sacked == false);
@@ -882,7 +883,7 @@ TcpTxBuffer::Update (const TcpOptionSack::SackList &list,
 }
 
 void
-TcpTxBuffer::UpdateLostCount ()
+TcpTxBuffer::UpdateLostCount (const Callback<void, TcpTxItem *> &notifyLossCb)
 {
   NS_LOG_FUNCTION (this);
   uint32_t sacked = 0;
@@ -912,6 +913,9 @@ TcpTxBuffer::UpdateLostCount ()
             {
               item->m_lost = true;
               m_lostOut += item->m_packet->GetSize ();
+              if(notifyLossCb.IsNull()){
+                  notifyLossCb(item);
+              }
             }
         }
       beginOfCurrentPacket -= item->m_packet->GetSize ();
@@ -924,6 +928,9 @@ TcpTxBuffer::UpdateLostCount ()
         {
           item->m_lost = true;
           m_lostOut += item->m_packet->GetSize ();
+          if(notifyLossCb.IsNull()){
+              notifyLossCb(item);
+          }
         }
     }
   NS_LOG_INFO ("Status after the update: " << *this);
@@ -1281,7 +1288,7 @@ TcpTxBuffer::ResetLastSegmentSent ()
 }
 
 void
-TcpTxBuffer::SetSentListLost (bool resetSack)
+TcpTxBuffer::SetSentListLost (bool resetSack,const Callback<void, TcpTxItem *> &notifyLossCb)
 {
   NS_LOG_FUNCTION (this);
   m_retrans = 0;
@@ -1303,6 +1310,9 @@ TcpTxBuffer::SetSentListLost (bool resetSack)
         {
           (*it)->m_sacked = false;
           (*it)->m_lost = true;
+          if(!notifyLossCb.IsNull()){
+              notifyLossCb(*it);
+          }
         }
       else
         {
@@ -1310,12 +1320,18 @@ TcpTxBuffer::SetSentListLost (bool resetSack)
             {
               // Have to increment it because we set it to 0 at line 1133
               m_lostOut += (*it)->m_packet->GetSize ();
+              if(!notifyLossCb.IsNull()){
+                  notifyLossCb(*it);
+              }
             }
           else if (!(*it)->m_sacked)
             {
               // Packet is not marked lost, nor is sacked. Then it becomes lost.
               (*it)->m_lost = true;
               m_lostOut += (*it)->m_packet->GetSize ();
+              if(!notifyLossCb.IsNull()){
+                  notifyLossCb(*it);
+              }
             }
         }
 

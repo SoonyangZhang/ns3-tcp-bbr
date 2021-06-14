@@ -87,6 +87,9 @@ public:
   struct RateInformation
   {
     uint64_t m_delivered {0};          //!< Connection's delivered data at the time the packet was sent
+    uint32_t m_bytesLostCount {0};           //!< Connection's loss data at the time the packet was sent
+    uint32_t m_deliveredEcnBytes{0};    //!< Connection's congestion encountered data at the time the packet was sent
+    uint32_t m_bytesInFlight{0};        //!< Connection's Bytes in flight at the time the packet was sent
     Time m_deliveredTime {Time::Max ()};//!< Connection's delivered time at the time the packet was sent
     Time m_firstSent     {Time::Max ()};//!< Connection's first sent time at the time the packet was sent
     bool m_isAppLimited  {false};      //!< Connection's app limited at the time the packet was sent

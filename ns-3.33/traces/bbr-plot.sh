@@ -9,7 +9,7 @@ gnuplot<<!
 set key top right
 set xlabel "time/s" 
 set ylabel "rate/bps"
-set xrange [0:200]
+set xrange [0:300]
 set yrange [0:10000000]
 set grid
 set term "png"
@@ -25,7 +25,7 @@ gnuplot<<!
 set key top right
 set xlabel "time/s" 
 set ylabel "rtt/ms"
-set xrange [0:200]
+set xrange [0:300]
 set yrange [0:450]
 set grid
 set term "png"

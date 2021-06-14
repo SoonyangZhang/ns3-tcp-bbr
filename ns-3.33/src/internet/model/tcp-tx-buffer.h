@@ -292,10 +292,12 @@ public:
    * \param list list of SACKed blocks
    * \param sackedCb Callback invoked, if it is not null, when a segment has been
    * SACKed by the receiver.
+   * \param notifyLossCb Callback invoked, a segment is marked as lost. 
    * \returns the number of bytes newly sacked by the list of blocks
    */
   uint32_t Update (const TcpOptionSack::SackList &list,
-                   const Callback<void, TcpTxItem *> &sackedCb = m_nullCb);
+                   const Callback<void, TcpTxItem *> &sackedCb = m_nullCb,
+                   const Callback<void, TcpTxItem *> &notifyLossCb=m_nullCb);
 
   /**
    * \brief Check if a segment is lost
@@ -348,7 +350,7 @@ public:
    * Moreover, reset the retransmit flag for every item.
    * \param resetSack True if the function should reset the SACK flags.
    */
-  void SetSentListLost (bool resetSack = false);
+  void SetSentListLost (bool resetSack = false,const Callback<void, TcpTxItem *> &notifyLossCb=m_nullCb);
 
   /**
    * \brief Check if the head is retransmitted
@@ -432,7 +434,7 @@ private:
    * the entire list, but a subset.
    *
    */
-  void UpdateLostCount ();
+  void UpdateLostCount (const Callback<void, TcpTxItem *> &notifyLossCb);
 
   /**
    * \brief Remove the size specified from the lostOut, retrans, sacked count

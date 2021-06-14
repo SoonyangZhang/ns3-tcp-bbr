@@ -54,10 +54,11 @@ public:
    * a rate sample later when the skb is (s)acked in SkbDelivered ().
    *
    * \param skb The SKB sent
+   * \param bytesInFlight inflight bytes before this packet is sent out
    * \param isStartOfTransmission true if this is a start of transmission
    * (i.e., in_flight == 0)
    */
-  virtual void SkbSent (TcpTxItem *skb, bool isStartOfTransmission) = 0;
+  virtual void SkbSent (TcpTxItem *skb, uint32_t bytesInFlight,bool isStartOfTransmission) = 0;
 
   /**
    * \brief Update the Rate information after an item is received
@@ -121,6 +122,16 @@ public:
   * \param rtt Instant RTT
   */
   virtual void UpdateRtt(Time rtt)=0;
+  /*
+  * This function will be called when a segment is marked as lost
+  * \param skb
+  */
+  virtual void NotifySkbLossEvent(TcpTxItem *skb)=0;
+  /*
+  * This function will be called when ack contians TcpHeader::ECE flag
+  * \param ecnBytes
+  */
+  virtual void AddEcnBytes(uint32_t ecnBytes)=0;
   /**
    * \brief Rate Sample structure
    *
@@ -138,7 +149,9 @@ public:
     bool          m_isAppLimited   {false};            //!< Indicates whether the rate sample is application-limited
     Time          m_interval       {Seconds (0.0)};    //!< The length of the sampling interval
     int32_t       m_delivered      {0};                //!< The amount of data marked as delivered over the sampling interval
+    int32_t       m_ecnBytesRound {0};
     uint32_t      m_priorDelivered {0};                //!< The delivered count of the most recent packet delivered
+    uint32_t      m_priorEcnBytes  {0};               //!< The congestion encountered (CE) count of the most recent packet delivered
     Time          m_priorTime      {Seconds (0.0)};    //!< The delivered time of the most recent packet delivered
     Time          m_sendElapsed    {Seconds (0.0)};    //!< Send time interval calculated from the most recent packet delivered
     Time          m_ackElapsed     {Seconds (0.0)};    //!< ACK time interval calculated from the most recent packet delivered
@@ -146,6 +159,9 @@ public:
     uint32_t      m_bytesLoss      {0};                //!< The amount of data marked as lost from the most recent ack received
     uint32_t      m_priorInFlight  {0};                //!< The value if bytes in flight prior to last received ack
     uint32_t      m_ackedSacked    {0};                //!< The amount of data acked and sacked in the last received ack
+    uint32_t      m_priorbytesLostCount{0};
+    uint32_t      m_bytesLostRound{0};
+    uint32_t      m_txInFlight   {0};
     /**
      * \brief Is the sample valid?
      * \return true if the sample is valid, false otherwise.
@@ -171,6 +187,8 @@ public:
     uint32_t  m_txItemDelivered {0};           //!< The value of delivered when the acked item was sent
     int32_t   m_rateDelivered   {0};           //!< The amount of data delivered considered to calculate delivery rate.
     Time      m_rateInterval    {Seconds (0)}; //!< The value of interval considered to calculate delivery rate.
+    uint32_t  m_bytesLostCount{0};                 //!< The value of lost bytes of the connection
+    uint32_t  m_deliveredEcnBytes{0};          //!< The value of congestion encountered bytes of the connection
     bool      m_rateAppLimited  {false};       //!< Was sample was taken when data is app limited?
   };
 };
@@ -193,7 +211,7 @@ public:
   {
   }
 
-  virtual void SkbSent (TcpTxItem *skb, bool isStartOfTransmission) override;
+  virtual void SkbSent (TcpTxItem *skb,uint32_t bytesInFlight,bool isStartOfTransmission) override;
   virtual void SkbDelivered (TcpTxItem * skb) override;
   virtual void CalculateAppLimited (uint32_t cWnd, uint32_t in_flight,
                                     uint32_t segmentSize, const SequenceNumber32 &tailSeq,
@@ -207,6 +225,8 @@ public:
     return m_rate;
   }
   virtual void UpdateRtt(Time rtt) override;
+  virtual void NotifySkbLossEvent(TcpTxItem *skb) override;
+  void AddEcnBytes(uint32_t ecnBytes) override;
   /**
    * TracedCallback signature for tcp rate update events.
    *

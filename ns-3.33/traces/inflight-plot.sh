@@ -1,9 +1,10 @@
 #! /bin/sh
+algo=bbr
 suffix=inflight
 file1=10.1.1.1_49153_10.1.1.2_5000_${suffix}.txt
 file2=10.1.1.1_49154_10.1.1.2_5000_${suffix}.txt
 file3=10.1.1.1_49155_10.1.1.2_5000_${suffix}.txt
-output=${suffix}
+output=${algo}-${suffix}
 gnuplot<<!
 set key top right
 set xlabel "time/s" 

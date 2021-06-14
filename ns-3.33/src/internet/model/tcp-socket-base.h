@@ -50,7 +50,7 @@ class TcpOption;
 class Ipv4Interface;
 class Ipv6Interface;
 class TcpRateOps;
-
+class TcpTxItem;
 /**
  * \ingroup tcp
  *
@@ -1241,7 +1241,11 @@ protected:
    * \return value of receiver's highest sequence number acked.
    */
   SequenceNumber32 GetHighRxAck (void) const;
-
+  /**
+   *  \brief Called When TcpTxItem is marked as lost;
+   *  \param skb TcpTxItem
+   */
+  void NotifySkbLossEvent(TcpTxItem *skb);
 protected:
   // Counters and events
   EventId           m_retxEvent     {}; //!< Retransmission event

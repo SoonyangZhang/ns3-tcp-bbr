@@ -1946,6 +1946,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
   else if (ackNumber == oldHeadSequence)
     {
       // DupAck. Artificially call PktsAcked: after all, one segment has been ACKed.
+      if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+          m_rateOps->AddEcnBytes(m_tcb->m_segmentSize);
+      }
       m_congestionControl->PktsAcked (m_tcb, 1, m_tcb->m_lastRtt);
     }
   else if (ackNumber > oldHeadSequence)
@@ -2010,10 +2013,12 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
               DoRetransmit (); // Assume the next seq is lost. Retransmit lost packet
               m_tcb->m_cWndInfl = SafeSubtraction (m_tcb->m_cWndInfl, bytesAcked);
             }
-
           // This partial ACK acknowledge the fact that one segment has been
           // previously lost and now successfully received. All others have
           // been processed when they come under the form of dupACKs
+          if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+              m_rateOps->AddEcnBytes(m_tcb->m_segmentSize);
+          }
           m_congestionControl->PktsAcked (m_tcb, 1, m_tcb->m_lastRtt);
           NewAck (ackNumber, m_isFirstPartialAck);
 
@@ -2041,6 +2046,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
       // of RecoveryPoint.
       else if (ackNumber < m_recover && m_tcb->m_congState == TcpSocketState::CA_LOSS)
         {
+          if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+              m_rateOps->AddEcnBytes(segsAcked*m_tcb->m_segmentSize);
+          }
           m_congestionControl->PktsAcked (m_tcb, segsAcked, m_tcb->m_lastRtt);
           m_congestionControl->IncreaseWindow (m_tcb, segsAcked);
 
@@ -2056,6 +2064,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
         }
       else if (m_tcb->m_congState == TcpSocketState::CA_CWR)
         {
+          if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+              m_rateOps->AddEcnBytes(segsAcked*m_tcb->m_segmentSize);
+          }
           m_congestionControl->PktsAcked (m_tcb, segsAcked, m_tcb->m_lastRtt);
           // TODO: need to check behavior if marking is compounded by loss
           // and/or packet reordering
@@ -2069,12 +2080,18 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
         {
           if (m_tcb->m_congState == TcpSocketState::CA_OPEN)
             {
+              if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+                  m_rateOps->AddEcnBytes(segsAcked*m_tcb->m_segmentSize);
+              }
               m_congestionControl->PktsAcked (m_tcb, segsAcked, m_tcb->m_lastRtt);
             }
           else if (m_tcb->m_congState == TcpSocketState::CA_DISORDER)
             {
               if (segsAcked >= oldDupAckCount)
                 {
+                  if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+                      m_rateOps->AddEcnBytes((segsAcked - oldDupAckCount)*m_tcb->m_segmentSize);
+                  }
                   m_congestionControl->PktsAcked (m_tcb, segsAcked - oldDupAckCount, m_tcb->m_lastRtt);
                 }
 
@@ -2111,6 +2128,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
               // can increase cWnd)
               // TODO:  check consistency for dynamic segment size
               segsAcked = static_cast<uint32_t>(ackNumber - oldHeadSequence) / m_tcb->m_segmentSize;
+              if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+                  m_rateOps->AddEcnBytes(segsAcked*m_tcb->m_segmentSize);
+              }
               m_congestionControl->PktsAcked (m_tcb, segsAcked, m_tcb->m_lastRtt);
               m_congestionControl->CwndEvent (m_tcb, TcpSocketState::CA_EVENT_COMPLETE_CWR);
               m_congestionControl->CongestionStateSet (m_tcb, TcpSocketState::CA_OPEN);
@@ -2129,7 +2149,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32 &ackNumber, bool scoreboardUpda
               // (which are the ones we have not passed to PktsAcked and that
               // can increase cWnd)
               segsAcked = (ackNumber - m_recover) / m_tcb->m_segmentSize;
-
+              if(TcpSocketState::ECN_ECE_RCVD==m_tcb->m_ecnState){
+                  m_rateOps->AddEcnBytes(segsAcked*m_tcb->m_segmentSize);
+              }
               m_congestionControl->PktsAcked (m_tcb, segsAcked, m_tcb->m_lastRtt);
 
               m_congestionControl->CongestionStateSet (m_tcb, TcpSocketState::CA_OPEN);
@@ -3037,11 +3059,11 @@ uint32_t
 TcpSocketBase::SendDataPacket (SequenceNumber32 seq, uint32_t maxSize, bool withAck)
 {
   NS_LOG_FUNCTION (this << seq << maxSize << withAck);
-
-  bool isStartOfTransmission = BytesInFlight () == 0U;
+  uint32_t bytesInFlight =BytesInFlight ();
+  bool isStartOfTransmission =(bytesInFlight== 0U);
   TcpTxItem *outItem = m_txBuffer->CopyFromSequence (maxSize, seq);
 
-  m_rateOps->SkbSent(outItem, isStartOfTransmission&&(m_tcb->m_highTxMark==m_tcb->m_nextTxSequence));
+  m_rateOps->SkbSent(outItem,bytesInFlight,isStartOfTransmission&&(m_tcb->m_highTxMark==m_tcb->m_nextTxSequence));
 
   bool isRetransmission = outItem->IsRetrans ();
   Ptr<Packet> p = outItem->GetPacketCopy ();
@@ -3702,7 +3724,7 @@ TcpSocketBase::ReTxTimeout ()
   // The head of the sent list will not be marked as sacked, therefore
   // will be retransmitted, if the receiver renegotiate the SACK blocks
   // that we received.
-  m_txBuffer->SetSentListLost (resetSack);
+  m_txBuffer->SetSentListLost (resetSack,MakeCallback(&TcpSocketBase::NotifySkbLossEvent,this));
 
   // From RFC 6675, Section 5.1
   // If an RTO occurs during loss recovery as specified in this document,
@@ -4165,7 +4187,8 @@ TcpSocketBase::ProcessOptionSack (const Ptr<const TcpOption> option)
   NS_LOG_FUNCTION (this << option);
 
   Ptr<const TcpOptionSack> s = DynamicCast<const TcpOptionSack> (option);
-  return m_txBuffer->Update (s->GetSackList (), MakeCallback (&TcpRateOps::SkbDelivered, m_rateOps));
+  return m_txBuffer->Update (s->GetSackList (), MakeCallback (&TcpRateOps::SkbDelivered, m_rateOps),
+                             MakeCallback(&TcpSocketBase::NotifySkbLossEvent,this));
 }
 
 void
@@ -4556,7 +4579,11 @@ TcpSocketBase::GetHighRxAck (void) const
 {
   return m_highRxAckMark.Get ();
 }
-
+void TcpSocketBase::NotifySkbLossEvent(TcpTxItem *skb){
+    m_rateOps->NotifySkbLossEvent(skb);
+    auto rateConn = m_rateOps->GetConnectionRate ();
+    m_congestionControl->MarkSkbLost(m_tcb,rateConn,skb);
+}
 
 //RttHistory methods
 RttHistory::RttHistory (SequenceNumber32 s, uint32_t c, Time t)

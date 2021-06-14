@@ -3,6 +3,7 @@
 #include <sys/stat.h> // stat
 #include <memory.h>
 #include <string.h>
+#include <map>
 #include "ns3/simulator.h"
 #include "tcp-tracer.h"
 namespace ns3{
@@ -68,6 +69,143 @@ bool MakePath(const std::string& path)
         return false;
     }
 }
+
+class InfoPriv:public Object{
+public:
+    static Ptr<InfoPriv> Get(void);
+    InfoPriv();
+    ~InfoPriv();
+    void SetExperimentInfo(uint32_t flow_num,uint32_t bottleneck_bw);
+    void SetLossRateFlag(bool flag);
+    bool IsEnableBandwidthUtility();
+    bool IsEnableLossRate() {return m_lossFlag;}
+    void RegisterBulkBytes(const TcpSessionKey &key,uint32_t bytes);
+    int64_t GetBulkBytes (const TcpSessionKey &key);
+    void OnLossInfo(uint32_t uuid,float loss_rate);
+    void OnSessionStop(uint32_t bytes,Time stop);
+private:
+    virtual void DoDispose (void);
+    static Ptr<InfoPriv> *DoGet (void);
+    static void Delete (void);
+    inline void OpenLossFile();
+    inline void OpenUtilFile();
+    uint32_t m_flows {0};
+    uint32_t m_bandwidth {0};
+    uint32_t m_flowCount{0};
+    Time m_stopStamp {Time(0)};
+    uint64_t m_bytes=0;
+    bool m_lossFlag {false};
+    std::map<TcpSessionKey,uint32_t> m_sessionBytes;
+    std::fstream m_loss;
+    std::fstream m_util;
+};
+Ptr<InfoPriv> InfoPriv::Get(void){
+    return *DoGet();
+}
+void InfoPriv::SetExperimentInfo(uint32_t flow_num,uint32_t bottleneck_bw){
+    m_flows=flow_num;
+    m_bandwidth=bottleneck_bw;
+}
+void InfoPriv::SetLossRateFlag(bool flag){
+    m_lossFlag=flag;
+}
+bool InfoPriv::IsEnableBandwidthUtility(){
+    return m_flows>0;
+}
+void InfoPriv::RegisterBulkBytes(const TcpSessionKey &key,uint32_t bytes){
+    if(m_flows>0){
+        m_sessionBytes.insert(std::make_pair(key,bytes));
+    }
+}
+int64_t InfoPriv::GetBulkBytes (const TcpSessionKey &key){
+    int64_t bytes=-1;
+    if(m_flows>0){
+        auto it=m_sessionBytes.find(key);
+        if(it!=m_sessionBytes.end()){
+            bytes=it->second;
+        }
+    }
+    return bytes;
+}
+void InfoPriv::OnLossInfo(uint32_t uuid,float loss_rate){
+    if(!m_loss.is_open()){
+        OpenLossFile();
+    }
+    m_loss<<uuid<<"\t"<<loss_rate<<std::endl;
+}
+void InfoPriv::OnSessionStop(uint32_t bytes,Time stop){
+    if(0==m_flows){
+        return ;
+    }
+    if(!m_util.is_open()){
+        OpenUtilFile();
+    }
+    m_bytes+=bytes;
+    m_flowCount++;
+    if(Time(0)==m_stopStamp||stop>m_stopStamp){
+        m_stopStamp=stop;
+    }
+    if(m_flowCount==m_flows){
+        double util=0.0;
+        if(m_stopStamp!=Time(0)){
+            double average_bps=1.0*m_bytes*8000/m_stopStamp.GetMilliSeconds();
+            util=average_bps*100/m_bandwidth;
+            m_util<<m_stopStamp.GetSeconds()<<"\t"<<m_bytes<<"\t"<<util<<std::endl;
+        }
+    }
+}
+InfoPriv::InfoPriv(){}
+InfoPriv::~InfoPriv(){
+    if(m_loss.is_open()){
+        m_loss.close();
+    }
+    if(m_util.is_open()){
+        m_util.close();
+    }
+}
+void InfoPriv::DoDispose(){
+    Object::DoDispose();
+}
+Ptr<InfoPriv> *InfoPriv::DoGet (void){
+    static Ptr<InfoPriv> ptr = 0;
+    if(0==ptr){
+        ptr = CreateObject<InfoPriv>();
+        Simulator::ScheduleDestroy (&InfoPriv::Delete);
+    }
+    return &ptr;
+}
+void InfoPriv::Delete (void){
+    (*DoGet ()) = 0;
+}
+void InfoPriv::OpenLossFile(){
+    char buf[FILENAME_MAX];
+    std::string path = std::string (getcwd(buf, FILENAME_MAX))+ "/traces/";
+    int len=strlen(RootDir);
+    if(len>0){
+        std::string parent_dir(RootDir,len);
+        path=parent_dir;
+        if(RootDir[len-1]!='/'){
+           path=parent_dir+"/";
+        }
+    }
+    path=path+"lossinfo.txt";
+    m_loss.open(path.c_str(), std::fstream::out);
+}
+void InfoPriv::OpenUtilFile(){
+    char buf[FILENAME_MAX];
+    std::string path = std::string (getcwd(buf, FILENAME_MAX))+ "/traces/";
+    int len=strlen(RootDir);
+    if(len>0){
+        std::string parent_dir(RootDir,len);
+        path=parent_dir;
+        if(RootDir[len-1]!='/'){
+           path=parent_dir+"/";
+        }
+    }
+    path=path+"utilinfo.txt";
+    m_util.open(path.c_str(), std::fstream::out);
+}
+
 TcpTracer::~TcpTracer()
 {
     if(m_cwnd.is_open()){
@@ -88,8 +226,37 @@ TcpTracer::~TcpTracer()
 }
 void TcpTracer::SetTraceFolder(const char *path){
     memset(RootDir,0,FILENAME_MAX);
-    int sz=std::min((int)(FILENAME_MAX-1),(int)strlen(path));
-    memcpy(RootDir,path,sz);
+    int len=strlen(path);
+    if(len>0){
+        memcpy(RootDir,path,len);
+    }
+}
+void TcpTracer::ClearTraceFolder(){
+    memset(RootDir,0,FILENAME_MAX);
+}
+void TcpTracer::SetExperimentInfo(uint32_t flow_num,uint32_t bottleneck_bw){
+    InfoPriv::Get()->SetExperimentInfo(flow_num,bottleneck_bw);
+}
+void TcpTracer::SetLossRateFlag(bool flag){
+    InfoPriv::Get()->SetLossRateFlag(flag);
+}
+bool TcpTracer::IsEnableLossRate(){
+    return InfoPriv::Get()->IsEnableLossRate();
+}
+bool TcpTracer::IsEnableBandwidthUtility(){
+    return InfoPriv::Get()->IsEnableBandwidthUtility();
+}
+void TcpTracer::RegisterBulkBytes(const TcpSessionKey &key,uint32_t bytes){
+    InfoPriv::Get()->RegisterBulkBytes(key,bytes);
+}
+int64_t TcpTracer::GetBulkBytes (const TcpSessionKey &key){
+    return InfoPriv::Get()->GetBulkBytes(key);
+}
+void TcpTracer::OnLossInfo(uint32_t uuid,float loss_rate){
+    InfoPriv::Get()->OnLossInfo(uuid,loss_rate);
+}
+void TcpTracer::OnSessionStop(uint32_t bytes,Time stop){
+    InfoPriv::Get()->OnSessionStop(bytes,stop);
 }
 void TcpTracer::OpenCwndTraceFile(std::string filename)
 {
@@ -195,61 +362,5 @@ void TcpTracer::DoDispose(){
 }
 void TcpTracer::DoInitialize(){
     Object::DoDispose();
-}
-class LossInfoPriv:public Object{
-public:
-    static Ptr<LossInfoPriv> Get(void);
-    LossInfoPriv();
-    ~LossInfoPriv();
-    void OnLossInfo(uint32_t uuid,float loss_rate);
-private:
-    virtual void DoDispose (void);
-    static Ptr<LossInfoPriv> *DoGet (void);
-    static void Delete (void);
-    std::fstream m_loss;
-};
-Ptr<LossInfoPriv> LossInfoPriv::Get(void){
-    return *DoGet();
-}
-void LossInfoPriv::OnLossInfo(uint32_t uuid,float loss_rate){
-    if(m_loss.is_open()){
-        m_loss<<uuid<<"\t"<<loss_rate<<std::endl;
-    }
-}
-LossInfoPriv::LossInfoPriv(){
-    char buf[FILENAME_MAX];
-    std::string path = std::string (getcwd(buf, FILENAME_MAX))+ "/traces/";
-    int len=strlen(RootDir);
-    if(len>0){
-        std::string parent_dir(RootDir,len);
-        path=parent_dir;
-        if(RootDir[len-1]!='/'){
-           path=parent_dir+"/";
-        }
-    }
-    path=path+"lossinfo.txt";
-    m_loss.open(path.c_str(), std::fstream::out);
-}
-LossInfoPriv::~LossInfoPriv(){
-    if(m_loss.is_open()){
-        m_loss.close();
-    }
-}
-void LossInfoPriv::DoDispose(){
-    Object::DoDispose();
-}
-Ptr<LossInfoPriv> *LossInfoPriv::DoGet (void){
-    static Ptr<LossInfoPriv> ptr = 0;
-    if(0==ptr){
-        ptr = CreateObject<LossInfoPriv>();
-        Simulator::ScheduleDestroy (&LossInfoPriv::Delete);
-    }
-    return &ptr;
-}
-void LossInfoPriv::Delete (void){
-    (*DoGet ()) = 0;
-}
-void TcpTracer::OnLossInfo(uint32_t uuid,float loss_rate){
-    LossInfoPriv::Get()->OnLossInfo(uuid,loss_rate);
 }
 }

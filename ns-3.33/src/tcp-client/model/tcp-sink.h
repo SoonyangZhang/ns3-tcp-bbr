@@ -20,6 +20,7 @@ private:
     Ptr<TcpTracer> m_trace;
     Time m_lastCountRateTime=Time(0);
     uint64_t m_lastRxBytes=0;
-    uint64_t m_totalRxBytes=0;
+    uint64_t m_rxBytes=0;
+    int64_t  m_totalBytes=0;
 };
 }

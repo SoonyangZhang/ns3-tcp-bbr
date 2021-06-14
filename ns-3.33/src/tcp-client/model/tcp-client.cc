@@ -17,13 +17,15 @@ TcpClient::TcpClient(uint64_t bytes,uint32_t flag){
     TcpClientIdCounter++;
 }
 TcpClient::~TcpClient(){
-    uint64_t max_val=m_totalTxBytes;
-    uint64_t min_val=m_targetBytes;
-    double loss_rate=0.0;
-    if(max_val>min_val){
-        loss_rate=1.0*(max_val-min_val)*100/max_val;
+    if(TcpTracer::IsEnableLossRate()){
+        uint64_t max_val=m_totalTxBytes;
+        uint64_t min_val=m_targetBytes;
+        double loss_rate=0.0;
+        if(max_val>min_val){
+            loss_rate=1.0*(max_val-min_val)*100/max_val;
+        }
+        TcpTracer::OnLossInfo(m_uuid,loss_rate);        
     }
-    TcpTracer::OnLossInfo(m_uuid,loss_rate);
 }
 void TcpClient::SetSegmentSize(uint32_t mss){
     kMSS=mss;
@@ -131,7 +133,9 @@ void TcpClient::RegisterTraceFunctions(){
     if(nullptr==m_socket||m_trace!=nullptr){
         return ;
     }
-    m_socket->TraceConnectWithoutContext ("Tx",MakeCallback(&TcpClient::TraceTxCallback,this));
+    if(TcpTracer::IsEnableLossRate()||m_traceFlag&E_TRACE_RATE){
+        m_socket->TraceConnectWithoutContext ("Tx",MakeCallback(&TcpClient::TraceTxCallback,this));
+    }
     if(0==m_traceFlag){
         return ;
     }
@@ -142,10 +146,14 @@ void TcpClient::RegisterTraceFunctions(){
     m_socket->GetSockName(local_addr);
     InetSocketAddress local_sock_addr=InetSocketAddress::ConvertFrom(local_addr);
     InetSocketAddress remote_sock_addr=InetSocketAddress::ConvertFrom(m_serverAddr);
-    std::string ip1_str=TcpUtils::ConvertIpString(GetIpv4Address().Get());
-    std::string port1_str=std::to_string(local_sock_addr.GetPort());
-    std::string ip2_str=TcpUtils::ConvertIpString(remote_sock_addr.GetIpv4().Get());
-    std::string port2_str=std::to_string(remote_sock_addr.GetPort());
+    uint32_t ip1=GetIpv4Address().Get();
+    uint16_t port1=local_sock_addr.GetPort();
+    uint32_t ip2=remote_sock_addr.GetIpv4().Get();
+    uint16_t port2=remote_sock_addr.GetPort();
+    std::string ip1_str=TcpUtils::ConvertIpString(ip1);
+    std::string port1_str=std::to_string(port1);
+    std::string ip2_str=TcpUtils::ConvertIpString(ip2);
+    std::string port2_str=std::to_string(port2);
     file_name=ip1_str+delimiter+port1_str+delimiter+ip2_str+delimiter+port2_str;
     if(m_traceFlag&E_TRACE_CWND){
         m_trace->OpenCwndTraceFile(file_name);
@@ -161,6 +169,10 @@ void TcpClient::RegisterTraceFunctions(){
     }
     if(m_traceFlag&E_TRACE_RATE){
         m_trace->OpenSendRateTraceFile(file_name);
+    }
+    if(TcpTracer::IsEnableBandwidthUtility()){
+        TcpSessionKey key(ip1,port1,ip2,port2);
+        TcpTracer::RegisterBulkBytes(key,m_targetBytes);
     }
 }
 void TcpClient::TraceCwndCallback(uint32_t oldval, uint32_t newval){

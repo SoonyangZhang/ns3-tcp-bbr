@@ -22,18 +22,27 @@ TcpSink::TcpSink(Ptr<Socket> socket,Address client_addr,Address server_addr,bool
     socket->SetCloseCallbacks(MakeCallback (&TcpSink::HandlePeerClose, this),
                                     MakeCallback (&TcpSink::HandlePeerError, this));
     m_socket=socket;
+    InetSocketAddress client_sock_addr=InetSocketAddress::ConvertFrom(client_addr);
+    InetSocketAddress server_sock_addr=InetSocketAddress::ConvertFrom(server_addr);
+    uint32_t ip1=client_sock_addr.GetIpv4().Get();
+    uint16_t port1=client_sock_addr.GetPort();
+    uint32_t ip2=server_sock_addr.GetIpv4().Get();
+    uint16_t port2=server_sock_addr.GetPort();
     if(log_rate){
         std::string file_name;
         std::string delimiter="_";
-        InetSocketAddress client_sock_addr=InetSocketAddress::ConvertFrom(client_addr);
-        InetSocketAddress server_sock_addr=InetSocketAddress::ConvertFrom(server_addr);
-        std::string ip1_str=TcpUtils::ConvertIpString(client_sock_addr.GetIpv4().Get());
-        std::string port1_str=std::to_string(client_sock_addr.GetPort());
-        std::string ip2_str=TcpUtils::ConvertIpString(server_sock_addr.GetIpv4().Get());
-        std::string port2_str=std::to_string(server_sock_addr.GetPort());
+        std::string ip1_str=TcpUtils::ConvertIpString(ip1);
+        std::string port1_str=std::to_string(port1);
+        std::string ip2_str=TcpUtils::ConvertIpString(ip2);
+        std::string port2_str=std::to_string(port2);
         file_name=ip1_str+delimiter+port1_str+delimiter+ip2_str+delimiter+port2_str;
         m_trace=CreateObject<TcpTracer>();
         m_trace->OpenGoodputTraceFile(file_name);
+    }
+    if(TcpTracer::IsEnableBandwidthUtility()){
+        TcpSessionKey key(ip1,port1,ip2,port2);
+        m_totalBytes=TcpTracer::GetBulkBytes(key);
+        NS_LOG_FUNCTION(m_totalBytes);
     }
 }
 TcpSink::~TcpSink(){}
@@ -54,7 +63,7 @@ void TcpSink::HandleRead (Ptr<Socket> socket){
         if(0==packet->GetSize ()){
             break;
         }
-        m_totalRxBytes+=packet->GetSize ();
+        m_rxBytes+=packet->GetSize ();
     }
     if(m_trace){
         Time now=Simulator::Now();
@@ -62,19 +71,18 @@ void TcpSink::HandleRead (Ptr<Socket> socket){
             m_lastCountRateTime=now;
         }
         if(now>=m_lastCountRateTime+kRateCountGap){
-            double bps=1.0*(m_totalRxBytes-m_lastRxBytes)*8000/(now-m_lastCountRateTime).GetMilliSeconds();
+            double bps=1.0*(m_rxBytes-m_lastRxBytes)*8000/(now-m_lastCountRateTime).GetMilliSeconds();
             DataRate rate(bps);
-            m_lastRxBytes=m_totalRxBytes;
+            m_lastRxBytes=m_rxBytes;
             m_lastCountRateTime=now;
             m_trace->OnGoodput(now,rate);
         }
     }
+    if(m_totalBytes>0&&m_totalBytes==m_rxBytes){
+        auto now=Simulator::Now();
+        TcpTracer::OnSessionStop(m_rxBytes,now);
+    }
 }
-void TcpSink::HandlePeerClose (Ptr<Socket> socket){
-    NS_LOG_FUNCTION (this << socket);
-}
-void TcpSink::HandlePeerError (Ptr<Socket> socket){
-    NS_LOG_FUNCTION (this << socket);
-}
-
+void TcpSink::HandlePeerClose (Ptr<Socket> socket){}
+void TcpSink::HandlePeerError (Ptr<Socket> socket){}
 }

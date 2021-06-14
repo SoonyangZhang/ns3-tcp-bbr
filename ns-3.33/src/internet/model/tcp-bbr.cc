@@ -5,6 +5,7 @@
 #include "tcp-bbr.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
+#include "tcp-bbr-debug.h"
 namespace ns3{
 NS_LOG_COMPONENT_DEFINE ("TcpBbr");
 NS_OBJECT_ENSURE_REGISTERED (TcpBbr);
@@ -61,7 +62,6 @@ static const uint32_t bbr_extra_acked_win_rtts = 5;
 static const uint32_t bbr_ack_epoch_acked_reset_thresh = 1U << 20;
 /* Time period for clamping cwnd increment due to ack aggregation */
 static const Time bbr_extra_acked_max_time = MilliSeconds(100);
-uint32_t BbrDebugIdCounter=0;
 }  // namespace
 TypeId TcpBbr::GetTypeId (void){
     static TypeId tid = TypeId ("ns3::TcpBbr")
@@ -81,8 +81,7 @@ m_maxBwFilter(kBandwidthWindowSize,DataRate(0),0){
     m_uv = CreateObject<UniformRandomVariable> ();
     m_uv->SetStream(time(NULL));
 #if (TCP_BBR_DEGUG)
-    m_debugId=BbrDebugIdCounter;
-    BbrDebugIdCounter++;
+    m_debug=CreateObject<TcpBbrDebug>(GetName());
 #endif
 }
 TcpBbr::TcpBbr(const TcpBbr &sock):
@@ -91,14 +90,10 @@ m_highGain(sock.m_highGain){
     m_uv = CreateObject<UniformRandomVariable> ();
     m_uv->SetStream(time(NULL));
 #if (TCP_BBR_DEGUG)
-    m_debugId=sock.m_debugId;
+    m_debug=sock.m_debug;
 #endif
 }
-TcpBbr::~TcpBbr(){
-#if (TCP_BBR_DEGUG)
-    CloseDebugFile();
-#endif
-}
+TcpBbr::~TcpBbr(){}
 std::string TcpBbr::ModeToString(uint8_t mode){
     switch(mode){
         case STARTUP:
@@ -182,7 +177,7 @@ void TcpBbr::CongestionStateSet (Ptr<TcpSocketState> tcb,const TcpSocketState::T
         LongTermBandwidthSampling(tcb,rs);
         bool use_lt=m_ltUseBandwidth;
         #if (TCP_BBR_DEGUG)
-        NS_LOG_INFO(m_debugId<<" rx time out "<<use_lt);
+        NS_LOG_INFO(m_debug->GetUuid()<<" rx time out "<<use_lt);
         #endif
     }
 }
@@ -228,7 +223,7 @@ DataRate TcpBbr::BbrBandwidth() const{
     if(m_ltUseBandwidth){
         bw=m_ltBandwidth;
         #if (TCP_BBR_DEGUG)
-        //NS_LOG_INFO(m_debugId<<"lt bw "<<m_ltBandwidth);
+        //NS_LOG_INFO(m_debug->GetUuid()<<"lt bw "<<m_ltBandwidth);
         #endif 
     }
     return bw;
@@ -269,7 +264,7 @@ void TcpBbr::InitPacingRateFromRtt(Ptr<TcpSocketState> tcb){
         pacing_rate=BbrBandwidthToPacingRate(tcb,bw,m_highGain);
     }
 #if (TCP_BBR_DEGUG)
-    NS_LOG_FUNCTION(m_debugId<<rtt.GetMilliSeconds()<<pacing_rate<<m_highGain);
+    NS_LOG_FUNCTION(m_debug->GetUuid()<<rtt.GetMilliSeconds()<<pacing_rate<<m_highGain);
 #endif
     if(pacing_rate>tcb->m_maxPacingRate){
         pacing_rate=tcb->m_maxPacingRate;
@@ -278,17 +273,14 @@ void TcpBbr::InitPacingRateFromRtt(Ptr<TcpSocketState> tcb){
 }
 void TcpBbr::SetPacingRate(Ptr<TcpSocketState> tcb,DataRate bw, double gain){
     DataRate rate=BbrBandwidthToPacingRate(tcb,bw,gain);
-    if(!(rate>0)){
-        #if (TCP_BBR_DEGUG)
-        NS_LOG_FUNCTION(m_debugId<<BbrMaxBandwidth()<<gain<<ModeToString(m_mode)<<m_roundTripCount<<m_delivered);
-        #endif
-    }
-    
     Time last_rtt=tcb->m_lastRtt;
     if(!m_hasSeenRtt&&(!last_rtt.IsZero())){
         InitPacingRateFromRtt(tcb);
     }
     if(BbrFullBandwidthReached()||rate>tcb->m_pacingRate){
+        if(BbrFullBandwidthReached()){
+            NS_ASSERT_MSG(rate>0,"rate is zero");
+        }
         tcb->m_pacingRate=rate;
     }
 }
@@ -390,14 +382,14 @@ void TcpBbr::LongTermBandwidthSampling(Ptr<TcpSocketState> tcb,const TcpRateOps:
     if(t>=MilliSeconds(value)){
         ResetLongTermBandwidthSampling(); /* interval too long; reset */
         #if (TCP_BBR_DEGUG)
-        NS_LOG_FUNCTION(m_debugId<<"interval too long");
+        NS_LOG_FUNCTION(m_debug->GetUuid()<<"interval too long");
         #endif
         return ;
     }
     double bps=1.0*delivered*8000/t.GetMilliSeconds();
     DataRate bw(bps);
     #if (TCP_BBR_DEGUG)
-    NS_LOG_FUNCTION(m_debugId<<delivered<<t.GetMilliSeconds()<<bw<<BbrMaxBandwidth());
+    NS_LOG_FUNCTION(m_debug->GetUuid()<<delivered<<t.GetMilliSeconds()<<bw<<BbrMaxBandwidth());
     #endif
     LongTermBandwidthIntervalDone(tcb,bw);
 }
@@ -484,7 +476,7 @@ void TcpBbr::UpdateAckAggregation(Ptr<TcpSocketState> tcb,const TcpRateOps::TcpR
     extra_acked_bytes=m_ackEpochAckedBytes-expected_acked_bytes;
     if(extra_acked_bytes>tcb->m_cWnd){
         #if (TCP_BBR_DEGUG)
-        //NS_LOG_FUNCTION(m_debugId<<"sub"<<extra_acked_bytes<<tcb->m_cWnd<<ModeToString(m_mode));
+        //NS_LOG_FUNCTION(m_debug->GetUuid()<<"sub"<<extra_acked_bytes<<tcb->m_cWnd<<ModeToString(m_mode));
         #endif
         extra_acked_bytes=tcb->m_cWnd;
     }
@@ -643,8 +635,8 @@ uint64_t TcpBbr::BbrBdp(Ptr<TcpSocketState> tcb,DataRate bw,double gain){
     uint64_t bdp=packet*mss;
     if(bdp<=kMinCWndSegment*mss){
     #if (TCP_BBR_DEGUG)
-        auto now=Simulator::Now().GetSeconds();
-        NS_LOG_FUNCTION(m_debugId<<now<<bdp<<bw<<m_minRtt.GetMilliSeconds()<<gain);
+        //auto now=Simulator::Now().GetSeconds();
+        //NS_LOG_FUNCTION(m_debug->GetUuid()<<now<<bdp<<bw<<m_minRtt.GetMilliSeconds()<<gain);
     #endif
         bdp=kMinCWndSegment*mss;
     }
@@ -826,33 +818,16 @@ uint32_t TcpBbr::MockRandomU32Max(uint32_t ep_ro){
 #if (TCP_BBR_DEGUG)
 void TcpBbr::LogDebugInfo(Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConnection &rc,
                             const TcpRateOps::TcpRateSample &rs){
-    if(!m_bbrDebug.is_open()){
-        OpenDebugFile();
-    }
     Time now=Simulator::Now();
     DataRate instant_bw=rs.m_deliveryRate;
     if(rs.m_delivered<=0||rs.m_interval.IsZero()||rs.m_priorTime.IsZero()){
         instant_bw=0;
     }
     DataRate long_bw=BbrBandwidth();
-    m_bbrDebug<<ModeToString(m_mode)<<" "<<now.GetSeconds()<<" "<<m_roundTripCount<<" "<<instant_bw.GetBitRate()<<" "
-              <<long_bw.GetBitRate()<<" "<<rs.m_delivered<<" "<<rs.m_sendElapsed.GetMilliSeconds()<<" "
-              <<rs.m_ackElapsed.GetMilliSeconds()<<" "<<rs.m_rtt.GetMilliSeconds()<<" "<<tcb->m_minRtt.GetMilliSeconds()<<" "
-               <<rs.m_bytesLoss<<std::endl;
-}
-void TcpBbr::OpenDebugFile(){
-    if(m_bbrDebug.is_open()){
-        return ;
-    }
-    char buf[FILENAME_MAX];
-    std::string path = std::string (getcwd(buf, FILENAME_MAX))+ "/traces/";
-    path=path+std::to_string(m_debugId)+"_bbr_info.txt";
-    m_bbrDebug.open(path.c_str(), std::fstream::out);
-}
-void TcpBbr::CloseDebugFile(){
-    if(m_bbrDebug.is_open()){
-        m_bbrDebug.close();
-    }
+    uint32_t rtt_ms=rs.m_rtt.GetMilliSeconds();
+    m_debug->GetStram()<<ModeToString(m_mode)<<" "<<now.GetSeconds()<<" "
+    <<instant_bw.GetBitRate()<<" "<<long_bw.GetBitRate()<<" "
+    <<rtt_ms<<" "<<rs.m_bytesLoss<<std::endl;
 }
 #endif
 }

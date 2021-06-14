@@ -11,6 +11,7 @@
 namespace ns3{
 #define TCP_BBR_DEGUG 1
 #define FUNC_INLINE
+class TcpBbrDebug;
 class TcpBbr: public TcpCongestionOps{
 public:
     enum Mode {
@@ -154,12 +155,9 @@ private:
                 unused_c:10;
     Ptr<UniformRandomVariable> m_uv{nullptr};
 #if (TCP_BBR_DEGUG)
-    void OpenDebugFile();
-    void CloseDebugFile();
     void LogDebugInfo(Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConnection &rc,
                             const TcpRateOps::TcpRateSample &rs);
-    std::fstream m_bbrDebug;
-    uint32_t m_debugId{0};
+    Ptr <TcpBbrDebug> m_debug;
 #endif
 };
 }

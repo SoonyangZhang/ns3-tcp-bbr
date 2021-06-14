@@ -1,4 +1,5 @@
 #include <string>
+#include <unistd.h>
 #include<stdio.h>
 #include <iostream>
 #include "ns3/core-module.h"
@@ -64,6 +65,18 @@ int main(int argc, char *argv[])
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(200*kMaxmiumSegmentSize));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(200*kMaxmiumSegmentSize));
     Config::SetDefault("ns3::TcpSocket::SegmentSize",UintegerValue(kMaxmiumSegmentSize));
+    
+    std::string algo("bbr");
+    std::string trace_folder;
+    
+    {
+        char buf[FILENAME_MAX];
+        std::string trace_path=std::string (getcwd(buf, FILENAME_MAX))+"/traces/";
+        trace_folder=trace_path+algo+"/";
+        MakePath(trace_folder);
+        TcpBbrDebug::SetTraceFolder(trace_folder.c_str());
+        TcpTracer::SetTraceFolder(trace_folder.c_str());
+    }
     uint32_t link_bw=6000000;
     uint32_t link_owd=50;
     uint32_t q_delay=200;
@@ -71,6 +84,11 @@ int main(int argc, char *argv[])
     topo=BuildExampleTopo(link_bw,link_owd,q_delay);
     Ptr<Node> h1=topo.Get(0);
     Ptr<Node> h2=topo.Get(1);
+
+    //for utility
+    TcpTracer::SetExperimentInfo(3,link_bw);
+    //for loss rate
+    TcpTracer::SetLossRateFlag(true);
 
     uint16_t serv_port = 5000;
     PacketSinkHelper sink ("ns3::TcpSocketFactory",
@@ -86,10 +104,9 @@ int main(int argc, char *argv[])
     InetSocketAddress socket_addr=InetSocketAddress{serv_ip,serv_port};
     Address serv_addr=socket_addr;
 
-    std::string algo("bbr");
     uint64_t totalTxBytes = 30000*1500;
     {
-        Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT);
+        Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT|TcpClient::E_TRACE_RATE);
         h1->AddApplication(client);
         client->ConfigurePeer(serv_addr);
         client->SetCongestionAlgo(algo);
@@ -97,7 +114,7 @@ int main(int argc, char *argv[])
         client->SetStopTime (Seconds (simDuration));
     }
     {
-        Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT);
+        Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT|TcpClient::E_TRACE_RATE);
         h1->AddApplication(client);
         client->ConfigurePeer(serv_addr);
         client->SetCongestionAlgo(algo);
@@ -105,11 +122,11 @@ int main(int argc, char *argv[])
         client->SetStopTime (Seconds (simDuration));
     }
     {
-        Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT);
+        Ptr<TcpClient>  client= CreateObject<TcpClient> (totalTxBytes,TcpClient::E_TRACE_RTT|TcpClient::E_TRACE_INFLIGHT|TcpClient::E_TRACE_RATE);
         h1->AddApplication(client);
         client->ConfigurePeer(serv_addr);
         client->SetCongestionAlgo(algo);
-        client->SetStartTime (Seconds (startTime+32));
+        client->SetStartTime (Seconds (startTime+40));
         client->SetStopTime (Seconds (simDuration));
     }
     

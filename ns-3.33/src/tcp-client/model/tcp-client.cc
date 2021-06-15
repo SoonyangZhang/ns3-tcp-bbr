@@ -52,6 +52,8 @@ void TcpClient::ConfigureCongstionAlgo(){
         id=TcpWestwood::GetTypeId ();
     }else if (0==m_algo.compare ("bbr")){
         id=TcpBbr::GetTypeId ();
+    }else if (0==m_algo.compare ("copa")){
+        id=TcpCopa::GetTypeId ();
     }else{
         id=TcpLinuxReno::GetTypeId();
     }
@@ -59,7 +61,7 @@ void TcpClient::ConfigureCongstionAlgo(){
     congestionAlgorithmFactory.SetTypeId (id);
     Ptr<TcpCongestionOps> algo = congestionAlgorithmFactory.Create<TcpCongestionOps> ();
     TcpSocketBase *base=static_cast<TcpSocketBase*>(PeekPointer(m_socket));
-    if(0==m_algo.compare ("bbr")){
+    if(0==m_algo.compare ("bbr")||0==m_algo.compare ("copa")){
         base->SetPacingStatus(true);
     }
     base->SetCongestionControlAlgorithm (algo);

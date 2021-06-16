@@ -27,7 +27,7 @@ m_minRttFilter(kCopa2MinRttWindowLength.GetMicroSeconds(),Time(0),0){
 #endif
 }
 
-TcpCopa2::TcpCopa2 (const TcpCopa2 &sock):TcpCongestionOps(),
+TcpCopa2::TcpCopa2 (const TcpCopa2 &sock):TcpCongestionOps(sock),
 m_minRttFilter(kCopa2MinRttWindowLength.GetMicroSeconds(),Time(0),0){
 #if (TCP_COPA2_DEGUG)
     m_debug=sock.m_debug;

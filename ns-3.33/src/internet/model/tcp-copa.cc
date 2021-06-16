@@ -61,7 +61,8 @@ m_standingRttFilter(kSrttWindowLength.GetMicroSeconds(),Time(0),0){
 #endif
 }
 
-TcpCopa::TcpCopa (const TcpCopa &sock):m_minRttFilter(kRTTWindowLength.GetMicroSeconds(),Time(0),0),
+TcpCopa::TcpCopa (const TcpCopa &sock):TcpCongestionOps (sock),
+m_minRttFilter(kRTTWindowLength.GetMicroSeconds(),Time(0),0),
 m_standingRttFilter(kSrttWindowLength.GetMicroSeconds(),Time(0),0),
 m_useRttStanding(sock.m_useRttStanding),
 m_isSlowStart(sock.m_isSlowStart),

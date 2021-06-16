@@ -84,7 +84,7 @@ m_maxBwFilter(kBandwidthWindowSize,DataRate(0),0){
     m_debug=CreateObject<TcpBbrDebug>(GetName());
 #endif
 }
-TcpBbr::TcpBbr(const TcpBbr &sock):
+TcpBbr::TcpBbr(const TcpBbr &sock):TcpCongestionOps(),
 m_maxBwFilter(kBandwidthWindowSize,DataRate(0),0),
 m_highGain(sock.m_highGain){
     m_uv = CreateObject<UniformRandomVariable> ();

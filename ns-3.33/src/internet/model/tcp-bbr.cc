@@ -188,9 +188,13 @@ bool TcpBbr::HasCongControl () const{
 void TcpBbr::CongControl (Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConnection &rc,
                             const TcpRateOps::TcpRateSample &rs){
     NS_ASSERT(rc.m_delivered>=m_delivered);
-    NS_ASSERT(rc.m_deliveredTime>=m_deliveredTime);
-    m_delivered=rc.m_delivered;
-    m_deliveredTime=rc.m_deliveredTime;
+    //NS_ASSERT(rc.m_deliveredTime>=m_deliveredTime);
+    if(rc.m_delivered>=m_delivered){
+        m_delivered=rc.m_delivered;
+    }
+    if(rc.m_deliveredTime>=m_deliveredTime){
+        m_deliveredTime=rc.m_deliveredTime;
+    }  
     if(rs.m_bytesLoss>0){
         m_bytesLost+=rs.m_bytesLoss;
     }

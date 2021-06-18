@@ -73,6 +73,7 @@ private:
     // time at which cwnd was last doubled during slow start
     Time m_lastCwndDoubleTime {Time(0)};
     VelocityState m_velocityState;
+    uint32_t m_ackBytesRound {0};
 #if (TCP_COPA_DEGUG)
     Ptr <TcpBbrDebug> m_debug;
 #endif

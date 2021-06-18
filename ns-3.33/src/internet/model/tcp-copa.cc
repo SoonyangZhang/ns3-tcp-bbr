@@ -1,5 +1,6 @@
 #include <limits>
 #include <stdexcept>
+#include <iostream>
 #include "tcp-copa.h"
 #include "tcp-bbr-debug.h"
 #include "ns3/simulator.h"
@@ -11,12 +12,12 @@ namespace{
     uint32_t kMinCwndSegment=4;
     Time kRTTWindowLength=MilliSeconds(10000);
     Time kSrttWindowLength=MilliSeconds(100);
-    template <class T1>
-    T1 AddAndCheckOverflow(T1 value, const T1 toAdd){
-        if (std::numeric_limits<T1>::max() - toAdd < value) {
+    uint32_t AddAndCheckOverflow(uint32_t value,const uint32_t toAdd,uint32_t label){
+        if (std::numeric_limits<uint32_t>::max() - toAdd < value) {
             // TODO: the error code is CWND_OVERFLOW but this function can totally be
             // used for inflight bytes.
-            throw std::runtime_error("Overflow bytes in flight");
+            std::cout<<value<<" "<<toAdd<<" "<<label<<std::endl;
+            NS_ASSERT_MSG(0,"Overflow bytes in flight");
         }
         value +=(toAdd);
         return value;
@@ -110,6 +111,9 @@ void TcpCopa::CongControl (Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConn
     if(rttStanding<rtt_min){
         return ;
     }
+    if(rs.m_ackedSacked){
+        m_ackBytesRound+=rs.m_ackedSacked;
+    }
     uint64_t delay_us;
     uint32_t packet_size=1500;
     uint32_t cwnd_bytes=tcb->m_cWnd;
@@ -143,7 +147,12 @@ void TcpCopa::CongControl (Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConn
             if(Time(0)==m_lastCwndDoubleTime){
                 m_lastCwndDoubleTime=event_time;
             }else if(event_time-m_lastCwndDoubleTime>srtt){
-                uint32_t new_cwnd=AddAndCheckOverflow(cwnd_bytes,cwnd_bytes);
+                uint32_t addition=0;
+                if(m_ackBytesRound>0){
+                    addition=cwnd_bytes;
+                }
+                uint32_t new_cwnd=AddAndCheckOverflow(cwnd_bytes,addition,154);
+                m_ackBytesRound=0;
                 tcb->m_cWnd=new_cwnd;
                 m_lastCwndDoubleTime=event_time;
             }
@@ -158,8 +167,12 @@ void TcpCopa::CongControl (Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConn
             }
             uint32_t mss=tcb->m_segmentSize;
             uint32_t acked_packets=DivRoundUp(rs.m_ackedSacked,mss);
-            uint32_t addition=(acked_packets*mss*mss*m_velocityState.velocity)/(m_deltaParam*cwnd_bytes);
-            uint32_t new_cwnd=AddAndCheckOverflow(cwnd_bytes,addition);
+            uint32_t addition=0;
+            if(acked_packets){
+                addition=(acked_packets*mss*mss*m_velocityState.velocity)/(m_deltaParam*cwnd_bytes);
+            }
+            uint32_t new_cwnd=AddAndCheckOverflow(cwnd_bytes,addition,174);
+            m_ackBytesRound=0;
             tcb->m_cWnd=new_cwnd;
         }
     }else{
@@ -168,7 +181,10 @@ void TcpCopa::CongControl (Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConn
         }
         uint32_t mss=tcb->m_segmentSize;
         uint32_t acked_packets=DivRoundUp(rs.m_ackedSacked,mss);
-        uint32_t reduction=(acked_packets*mss*mss*m_velocityState.velocity)/(m_deltaParam*cwnd_bytes);
+        uint32_t reduction=0;
+        if(acked_packets){
+            reduction=(acked_packets*mss*mss*m_velocityState.velocity)/(m_deltaParam*cwnd_bytes);
+        }
         if(cwnd_bytes<reduction){
             reduction=cwnd_bytes;
         }
@@ -176,6 +192,7 @@ void TcpCopa::CongControl (Ptr<TcpSocketState> tcb,const TcpRateOps::TcpRateConn
         new_cwnd=std::max<uint32_t>(new_cwnd,kMinCwndSegment*mss);
         tcb->m_cWnd=new_cwnd;
         m_isSlowStart=false;
+        m_ackBytesRound=0;
     }
     SetPacingRate(tcb,2.0);
 #if (TCP_COPA_DEGUG)

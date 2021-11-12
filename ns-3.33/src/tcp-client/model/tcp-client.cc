@@ -1,7 +1,7 @@
 #include <string>
 #include <algorithm>
 #include "tcp-utils.h"
-#include"tcp-client.h"
+#include "tcp-client.h"
 #include "ns3/log.h"
 namespace ns3{
 namespace{
@@ -16,17 +16,7 @@ TcpClient::TcpClient(uint64_t bytes,uint32_t flag){
     m_uuid=TcpClientIdCounter;
     TcpClientIdCounter++;
 }
-TcpClient::~TcpClient(){
-    if(TcpTracer::IsEnableLossRate()){
-        uint64_t max_val=m_totalTxBytes;
-        uint64_t min_val=m_targetBytes;
-        double loss_rate=0.0;
-        if(max_val>min_val){
-            loss_rate=1.0*(max_val-min_val)*100/max_val;
-        }
-        TcpTracer::OnLossInfo(m_uuid,loss_rate);        
-    }
-}
+TcpClient::~TcpClient(){}
 void TcpClient::SetSegmentSize(uint32_t mss){
     kMSS=mss;
 }
@@ -54,6 +44,10 @@ void TcpClient::ConfigureCongstionAlgo(){
         id=TcpBbr::GetTypeId ();
     }else if (0==m_algo.compare ("copa")){
         id=TcpCopa::GetTypeId ();
+    }else if (0==m_algo.compare ("copa2")){
+        id=TcpCopa2::GetTypeId ();
+    }else if (0==m_algo.compare ("renoagent")){
+        id=TcpRenoAgent::GetTypeId();
     }else{
         id=TcpLinuxReno::GetTypeId();
     }
@@ -61,7 +55,7 @@ void TcpClient::ConfigureCongstionAlgo(){
     congestionAlgorithmFactory.SetTypeId (id);
     Ptr<TcpCongestionOps> algo = congestionAlgorithmFactory.Create<TcpCongestionOps> ();
     TcpSocketBase *base=static_cast<TcpSocketBase*>(PeekPointer(m_socket));
-    if(0==m_algo.compare ("bbr")||0==m_algo.compare ("copa")){
+    if(0==m_algo.compare ("bbr")||0==m_algo.compare ("copa")||0==m_algo.compare ("copa2")){
         base->SetPacingStatus(true);
     }
     base->SetCongestionControlAlgorithm (algo);
@@ -108,6 +102,7 @@ void TcpClient::OnCanWrite(Ptr<Socket> socket, uint32_t){
 }
 void TcpClient::HandlePeerClose (Ptr<Socket> socket){
     NS_LOG_FUNCTION (this << socket);
+    LogLossInfo();
 }
 void TcpClient::HandlePeerError (Ptr<Socket> socket){
     NS_LOG_FUNCTION (this << socket);
@@ -214,5 +209,15 @@ void TcpClient::TraceTxCallback(Ptr<const Packet> packet, const TcpHeader& heade
         }        
     }
 }
-
+void TcpClient::LogLossInfo(){
+    if(TcpTracer::IsEnableLossRate()){
+        uint64_t max_val=m_totalTxBytes;
+        uint64_t min_val=m_targetBytes;
+        double loss_rate=0.0;
+        if(max_val>min_val){
+            loss_rate=1.0*(max_val-min_val)*100/max_val;
+        }
+        TcpTracer::OnLossInfo(m_uuid,loss_rate);        
+    }
+}
 }

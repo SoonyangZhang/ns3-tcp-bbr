@@ -14,6 +14,8 @@ namespace ns3{
 class TcpBbrDebug;
 class TcpBbr: public TcpCongestionOps{
 public:
+    static void SetAddMode(bool enable);
+    static void SetAddOn(uint32_t packets);
     enum Mode {
         // Startup phase of the connection.
         STARTUP,

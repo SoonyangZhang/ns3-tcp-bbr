@@ -63,6 +63,18 @@ static const uint32_t bbr_ack_epoch_acked_reset_thresh = 1U << 20;
 /* Time period for clamping cwnd increment due to ack aggregation */
 static const Time bbr_extra_acked_max_time = MilliSeconds(100);
 }  // namespace
+namespace{
+    uint32_t kAddPackets=8;
+    bool kAddMode=false;
+}
+void TcpBbr::SetAddMode(bool enable){
+    kAddMode=enable;
+}
+void TcpBbr::SetAddOn(uint32_t packets){
+    if(packets>4){
+        kAddPackets=packets;
+    }
+}
 TypeId TcpBbr::GetTypeId (void){
     static TypeId tid = TypeId ("ns3::TcpBbr")
     .SetParent<TcpCongestionOps> ()
@@ -278,6 +290,33 @@ void TcpBbr::InitPacingRateFromRtt(Ptr<TcpSocketState> tcb){
 void TcpBbr::SetPacingRate(Ptr<TcpSocketState> tcb,DataRate bw, double gain){
     DataRate rate=BbrBandwidthToPacingRate(tcb,bw,gain);
     Time last_rtt=tcb->m_lastRtt;
+    if(kAddMode&&m_mode==PROBE_BW&&gain!=kPacingGain[2]){
+        bool rtt_valid=true;
+        if(Time::Max()==m_minRtt||m_minRtt.IsZero()){
+            rtt_valid=false;
+        }
+        if(rtt_valid){
+            uint32_t mss=tcb->m_segmentSize;
+            double bps=1.0*kAddPackets*8*1000/m_minRtt.GetMilliSeconds();
+            double add_on=bps;
+            if(gain==kPacingGain[0]){
+                bps=bw.GetBitRate()+add_on;
+                rate=DataRate(bps);
+            }
+            if(gain==kPacingGain[1]){
+                bps=1.0*4*mss*8*1000/m_minRtt.GetMilliSeconds();
+                DataRate min_rate(bps);
+                if(bw.GetBitRate()>min_rate.GetBitRate()+add_on){
+                    bps=bw.GetBitRate()-add_on;
+                    rate=DataRate(bps);
+                }else{
+                    rate=min_rate;
+                }
+            }
+        }
+    }
+    
+    
     if(!m_hasSeenRtt&&(!last_rtt.IsZero())){
         InitPacingRateFromRtt(tcb);
     }

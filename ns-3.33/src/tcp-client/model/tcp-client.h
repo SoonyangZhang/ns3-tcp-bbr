@@ -38,6 +38,7 @@ private:
     void TraceBytesInflightCallback(uint32_t oldval,uint32_t newval);
     void TraceRttCallback(Time oldval, Time newval);
     void TraceTxCallback(Ptr<const Packet> packet, const TcpHeader& header,Ptr<const TcpSocketBase> base);
+    void LogLossInfo();
     uint16_t m_port=0;
     uint64_t m_targetBytes=0;
     uint64_t m_currentTxBytes=0;

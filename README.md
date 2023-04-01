@@ -1,5 +1,14 @@
 # ns3-tcp-bbr
-Implement TCP BBR in ns3.33
+Implement TCP BBR in ns3.33.  
+If you used this repo to test BBR and Copa in your research and is interested in citing it here's how you do it:  
+```
+@Misc{,  
+    author = {SoonyangZhang},  
+    title = {ns3-tcp-bbr},  
+    year = {2021--},  
+    url = "https://github.com/SoonyangZhang/ns3-tcp-bbr"
+  }  
+```
 ## Build
 ```
 cd ns3.33  
